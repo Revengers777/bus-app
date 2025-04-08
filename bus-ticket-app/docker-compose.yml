@@ -1,47 +1,43 @@
+version: "3.9"
+
 services:
-  # Servicio de Nginx (Proxy Inverso + Frontend)
   proxy:
-    build:
-      context: .                # Contexto raíz para acceder al frontend
-      dockerfile: proxy/Dockerfile
+    image: my-proxy:latest
+    deploy:
+      mode: replicated
+      replicas: 2
     ports:
-      - "80:80"  # Accesible desde el host en http://localhost
-    depends_on:
-      - user-auth
-      - bus-reservation
-      - payment-gateway
-      - route-scheduler
+      - "80:80"
+    networks:
+      - app-network
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+
+  user-auth:
+    image: mi_app/user-auth:latest
     networks:
       - app-network
 
-  user-auth:
-    build: ./microservices/user-auth
-    ports:
-      - "5001:5001"
-    networks:
-      - app-network
-      
   bus-reservation:
-    build: ./microservices/bus-reservation
-    ports:
-      - "5002:5002"
+    image: mi_app/bus-reservation:latest
     networks:
       - app-network
-      
+
   payment-gateway:
-    build: ./microservices/payment-gateway
-    ports:
-      - "5003:5003"
+    image: mi_app/payment-gateway:latest
     networks:
       - app-network
 
   route-scheduler:
-    build: ./microservices/route-scheduler
-    ports:
-      - "5004:5004"
+    image: mi_app/route-scheduler:latest
     networks:
       - app-network
-      
+
 networks:
   app-network:
-    driver: bridge
+    driver: overlay
+
+configs:
+  nginx_config:
+    file: ./proxy/nginx.conf
