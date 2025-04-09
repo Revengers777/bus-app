@@ -1,55 +1,49 @@
 ---
+# playbook_common.yml
 - name: Configuración Común para Nodos Docker
   hosts: all
-  become: yes
+  become: yes # La mayoría de las tareas requieren privilegios de root
   vars:
-    repo_url: https://github.com/Revengers777/bus-app.git
-    repo_dest: /vagrant/bus-app
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+    repo_url: https://github.com/Revengers777/bus-app.git # Usamos tu repositorio
+    repo_dest: /vagrant/bus-app # Destino dentro del invitado (corresponde a ./bus-app en el host)
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/" # Directorio para build/deploy
   tasks:
     - name: Actualizar caché de apt
       ansible.builtin.apt:
         update_cache: yes
-        cache_valid_time: 3600
+        cache_valid_time: 3600 # Actualizar solo si la caché tiene más de 1 hora. La IA optimiza cosas
 
-    - name: Instalar paquetes prerequisito (incluyendo git)
+    - name: Instalar paquetes prerrequisito (incluyendo git)
       ansible.builtin.apt:
+        # Asegurarse de que git está instalado para el módulo ansible.builtin.git
         name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
         state: present
 
-    - name: Comprobar si existe el script get-docker.sh
-      ansible.builtin.stat:
-        path: /tmp/get-docker.sh
-      register: docker_script_stat
+    - name: Clonar el repositorio bus-app
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"  # Usamos tu repositorio
+        dest: "{{ repo_dest }}"  # La carpeta donde clonaremos el repositorio
+        clone: yes
+        update: yes
 
-    - name: Descargar script get-docker.sh
-      ansible.builtin.get_url:
-        url: https://get.docker.com
-        dest: /tmp/get-docker.sh
-        mode: '0755'
-      when: not docker_script_stat.stat.exists
+    - name: Instalar Docker Compose
+      ansible.builtin.shell:
+        cmd: |
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
+        creates: /usr/bin/docker-compose
+      register: docker_compose_installed
+      changed_when: docker_compose_installed.stdout != ''
+      failed_when: docker_compose_installed.rc != 0
+      become: yes
+      become_user: root
 
-    - name: Ejecutar get-docker.sh para instalar Docker
+    - name: Verificar instalación de Docker Compose
       ansible.builtin.command:
-        cmd: sh /tmp/get-docker.sh
-        creates: /usr/bin/docker
+        cmd: docker-compose --version
+      register: docker_compose_version
+      failed_when: "'docker-compose' not in docker_compose_version.stdout"
+      changed_when: false
 
-    - name: Añadir usuario vagrant al grupo docker
-      ansible.builtin.user:
-        name: vagrant
-        groups: docker
-        append: yes
-      notify: Reiniciar Servicio Docker
-
-    - name: Asegurar que el servicio Docker está iniciado y habilitado
-      ansible.builtin.systemd:
-        name: docker
-        state: started
-        enabled: yes
-
-  handlers:
-    - name: Reiniciar Servicio Docker
-      ansible.builtin.systemd:
-        name: docker
-        state: restarted
-      listen: "Reiniciar Servicio Docker"
