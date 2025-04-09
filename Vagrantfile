@@ -1,19 +1,30 @@
 Vagrant.configure("2") do |config|
-  # Box base
   config.vm.box = "bento/ubuntu-22.04"
 
-  # Script común para instalar Docker
-  docker_install_script = <<-SHELL
+  # Paquetes comunes para todas las VMs
+  common_packages = <<-SHELL
+    apt-get update
+    apt-get install -y curl python3-pip jq git net-tools
+    pip3 install ansible
+  SHELL
+
+  # Docker y Docker Compose
+  docker_install = <<-SHELL
     curl -fsSL https://get.docker.com -o get-docker.sh
     sh get-docker.sh
     usermod -aG docker vagrant
+
+    # Instalar Docker Compose plugin (v2)
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
   SHELL
 
-  # Carpeta sincronizada (con permisos de lectura y escritura)
+  # Carpeta compartida con permisos RW
   shared_folder_host = "."
   shared_folder_guest = "/vagrant"
 
-  # Nodo principal (antes manager)
+  # Nodo principal
   config.vm.define "principal" do |principal|
     principal.vm.hostname = "swarm-principal"
     principal.vm.network "private_network", ip: "192.168.33.10"
@@ -22,11 +33,12 @@ Vagrant.configure("2") do |config|
       vb.name = "swarm-principal"
       vb.memory = 1024
     end
-    principal.vm.provision "shell", inline: docker_install_script
-    principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["dmode=775", "fmode=775"]
+    principal.vm.provision "shell", inline: common_packages
+    principal.vm.provision "shell", inline: docker_install
+    principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 
-  # Nodo esclavo (antes nodo1)
+  # Nodo esclavo
   config.vm.define "esclavo" do |esclavo|
     esclavo.vm.hostname = "swarm-esclavo"
     esclavo.vm.network "private_network", ip: "192.168.33.11"
@@ -34,7 +46,8 @@ Vagrant.configure("2") do |config|
       vb.name = "swarm-esclavo"
       vb.memory = 1024
     end
-    esclavo.vm.provision "shell", inline: docker_install_script
-    esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["dmode=775", "fmode=775"]
+    esclavo.vm.provision "shell", inline: common_packages
+    esclavo.vm.provision "shell", inline: docker_install
+    esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 end
