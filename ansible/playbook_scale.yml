@@ -1,0 +1,34 @@
+---
+- name: Escalar servicios del stack
+  hosts: principal
+  become: yes
+  tasks:
+    - name: Escalar el servicio proxy a 2 réplicas
+      shell: docker service scale bus_stack_proxy=2
+      register: scale_result_proxy
+      failed_when: scale_result_proxy.rc != 0
+      changed_when: scale_result_proxy.rc == 0
+
+    - name: Escalar el servicio user-auth a 2 réplicas
+      shell: docker service scale bus_stack_user-auth=2
+      register: scale_result_auth
+      failed_when: scale_result_auth.rc != 0
+      changed_when: scale_result_auth.rc == 0
+
+    - name: Escalar el servicio bus-reservation a 2 réplicas
+      shell: docker service scale bus_stack_bus-reservation=2
+      register: scale_result_reservation
+      failed_when: scale_result_reservation.rc != 0
+      changed_when: scale_result_reservation.rc == 0
+
+    - name: Escalar el servicio payment-gateway a 2 réplicas
+      shell: docker service scale bus_stack_payment-gateway=2
+      register: scale_result_payment
+      failed_when: scale_result_payment.rc != 0
+      changed_when: scale_result_payment.rc == 0
+
+    - name: Escalar el servicio route-scheduler a 2 réplicas
+      shell: docker service scale bus_stack_route-scheduler=2
+      register: scale_result_scheduler
+      failed_when: scale_result_scheduler.rc != 0
+      changed_when: scale_result_scheduler.rc == 0
