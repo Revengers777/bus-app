@@ -1,0 +1,52 @@
+---
+- name: Configuración Específica del Nodo Manager
+  hosts: all
+  become: yes
+  vars:
+    swarm_join_file: /vagrant/unir_swarm.txt
+    manager_ip: 192.168.33.10
+    repo_url: https://github.com/Revengers777/bus-app.git
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+  tasks:
+    - name: Clonar o actualizar el repositorio de la aplicación
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
+        version: main
+        clone: yes
+        update: yes
+
+    - name: Construir imágenes de la aplicación con docker compose
+      ansible.builtin.command:
+        cmd: docker compose build
+        chdir: "{{ app_build_dir }}"
+      environment:
+        COMPOSE_PROJECT_NAME: busapp
+      register: compose_build_result
+      changed_when: "'Successfully built' in compose_build_result.stdout"
+
+    - name: Inicializar Docker Swarm
+      ansible.builtin.command:
+        cmd: "docker swarm init --advertise-addr {{ manager_ip }}"
+      register: swarm_init_result
+      failed_when: "'Error response from daemon' in swarm_init_result.stderr and 'This node is already part of a swarm' not in swarm_init_result.stderr"
+      changed_when: "'Swarm initialized' in swarm_init_result.stdout"
+
+    - name: Extraer la línea de comando exacta para unirse
+      ansible.builtin.shell:
+        cmd: >
+          docker swarm join-token worker | tail -2 | head -1
+      register: swarm_join_command
+
+    - name: Guardar el comando en un archivo
+      ansible.builtin.copy:
+        content: "{{ swarm_join_command.stdout }}"
+        dest: "{{ swarm_join_file }}"
+
+    - name: Desplegar Stack Docker
+      ansible.builtin.command:
+        cmd: docker stack deploy -c docker-stack.yml bus_stack
+        chdir: /vagrant/bus-app/bus-ticket-app
+      register: stack_deploy_result
+      changed_when: "'Creating network' in stack_deploy_result.stdout or 'Updating service' in stack_deploy_result.stdout"
