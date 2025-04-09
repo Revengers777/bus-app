@@ -7,13 +7,6 @@
     repo_url: https://github.com/Revengers777/bus-app.git  # Usamos tu repositorio
     repo_dest: /vagrant/bus-app  # Destino dentro del invitado (corresponde a ./bus-app en el host)
     app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
-    docker_images:
-      - revengers0/my-proxy:latest
-      - revengers0/user-auth:latest
-      - revengers0/bus-reservation:latest
-      - revengers0/payment-gateway:latest
-      - revengers0/route-scheduler:latest
-    swarm_advertise_addr: "192.168.33.10"  # IP específica para Docker Swarm
 
   tasks:
     - name: Actualizar caché de apt
@@ -56,30 +49,24 @@
       debug:
         msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
 
-    - name: Inicializar Docker Swarm en el nodo principal
-      shell: |
-        docker swarm init --advertise-addr {{ swarm_advertise_addr }}
-      when: inventory_hostname == 'principal'
-      register: swarm_init
-      ignore_errors: yes
-
-    - name: Crear la red overlay para Docker Swarm
-      shell: |
-        docker network create --driver=overlay app-network
-      when: inventory_hostname == 'principal'
-      register: network_create
-      ignore_errors: yes
-
-    - name: Descargar imágenes de Docker desde Docker Hub
-      docker_image:
-        name: "{{ item }}"
-        source: pull
-      with_items: "{{ docker_images }}"
+    # Escalado de servicios en Docker Swarm
+    - name: Escalar el servicio proxy a 2 réplicas
+      shell: docker service scale bus_stack_proxy=2
       when: inventory_hostname == 'principal'
 
-    - name: Desplegar la aplicación usando Docker Stack
-      shell: |
-        docker stack deploy -c {{ repo_dest }}/bus-ticket-app/docker-compose.yml bus_stack
+    - name: Escalar el servicio user-auth a 3 réplicas
+      shell: docker service scale bus_stack_user-auth=3
       when: inventory_hostname == 'principal'
-      register: stack_deploy
-      ignore_errors: yes
+
+    - name: Escalar el servicio bus-reservation a 3 réplicas
+      shell: docker service scale bus_stack_bus-reservation=3
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio payment-gateway a 3 réplicas
+      shell: docker service scale bus_stack_payment-gateway=3
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio route-scheduler a 3 réplicas
+      shell: docker service scale bus_stack_route-scheduler=3
+      when: inventory_hostname == 'principal'
+
