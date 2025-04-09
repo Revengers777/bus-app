@@ -1,0 +1,2 @@
+# Ignorar la carpeta .vagrant (máquina virtual de Vagrant)
+.vagrant/
