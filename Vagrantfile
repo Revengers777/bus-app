@@ -36,7 +36,7 @@ Vagrant.configure("2") do |config|
     principal.vm.provision "shell", inline: common_packages
     principal.vm.provision "shell", inline: docker_install
     principal.vm.provision "ansible" do |ansible|
-      ansible.playbook = "playbook_common.yml"  # Asegúrate de que el playbook esté en el directorio correcto
+      ansible.playbook = "ansible/playbook_common.yml"  # Ruta correcta al playbook dentro de la carpeta 'ansible'
     end
     principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
@@ -52,7 +52,7 @@ Vagrant.configure("2") do |config|
     esclavo.vm.provision "shell", inline: common_packages
     esclavo.vm.provision "shell", inline: docker_install
     esclavo.vm.provision "ansible" do |ansible|
-      ansible.playbook = "playbook_common.yml"  # Asegúrate de que el playbook esté en el directorio correcto
+      ansible.playbook = "ansible/playbook_common.yml"  # Ruta correcta al playbook dentro de la carpeta 'ansible'
     end
     esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
