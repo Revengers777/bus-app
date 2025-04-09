@@ -40,12 +40,12 @@
       become: yes
       become_user: root
 
-- name: Verificar instalación de Docker Compose
-  command: docker-compose --version
-  register: docker_compose_version
-  ignore_errors: yes  # Esto asegura que no falle la tarea si hay un error o una advertencia.
+    - name: Verificar instalación de Docker Compose
+      command: docker-compose --version
+      register: docker_compose_version
+      ignore_errors: yes  # Esto asegura que no falle la tarea si hay un error o una advertencia.
 
-- name: Mostrar versión de Docker Compose
-  debug:
-    msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
+    - name: Mostrar versión de Docker Compose
+      debug:
+        msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
 
