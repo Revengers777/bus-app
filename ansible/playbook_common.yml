@@ -1,72 +1,50 @@
----
-# playbook_common.yml
-- name: Configuración Común para Nodos Docker
+----
+- name: Configuración común para nodos Docker
   hosts: all
-  become: yes  # La mayoría de las tareas requieren privilegios de root
+  become: yes
   vars:
-    repo_url: https://github.com/Revengers777/bus-app.git  # Usamos tu repositorio
-    repo_dest: /vagrant/bus-app  # Destino dentro del invitado (corresponde a ./bus-app en el host)
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
+    repo_url: https://github.com/Revengers777/bus-app.git
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
 
   tasks:
     - name: Actualizar caché de apt
       ansible.builtin.apt:
         update_cache: yes
-        cache_valid_time: 3600  # Actualizar solo si la caché tiene más de 1 hora
+        cache_valid_time: 3600
 
-    - name: Instalar paquetes prerrequisito (incluyendo git)
+    - name: Instalar paquetes necesarios
       ansible.builtin.apt:
         name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
         state: present
 
-    - name: Clonar el repositorio bus-app
+    - name: Clonar repositorio del proyecto
       ansible.builtin.git:
-        repo: "{{ repo_url }}"  # Usamos tu repositorio
-        dest: "{{ repo_dest }}"  # La carpeta donde clonaremos el repositorio
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
         clone: yes
         update: yes
 
     - name: Instalar Docker Compose
       ansible.builtin.shell:
         cmd: |
-          sudo mkdir -p /usr/local/lib/docker/cli-plugins
-          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-          sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
         creates: /usr/bin/docker-compose
-      register: docker_compose_installed
-      changed_when: docker_compose_installed.stdout != ''
-      failed_when: docker_compose_installed.rc != 0
-      become: yes
-      become_user: root
 
     - name: Verificar instalación de Docker Compose
       command: docker-compose --version
       register: docker_compose_version
-      ignore_errors: yes  # Esto asegura que no falle la tarea si hay un error o una advertencia.
+      ignore_errors: yes
 
     - name: Mostrar versión de Docker Compose
       debug:
         msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
 
-    # Escalado de servicios en Docker Swarm
-    - name: Escalar el servicio proxy a 2 réplicas
-      shell: docker service scale bus_stack_proxy=2
-      when: inventory_hostname == 'principal'
-
-    - name: Escalar el servicio user-auth a 3 réplicas
-      shell: docker service scale bus_stack_user-auth=3
-      when: inventory_hostname == 'principal'
-
-    - name: Escalar el servicio bus-reservation a 3 réplicas
-      shell: docker service scale bus_stack_bus-reservation=3
-      when: inventory_hostname == 'principal'
-
-    - name: Escalar el servicio payment-gateway a 3 réplicas
-      shell: docker service scale bus_stack_payment-gateway=3
-      when: inventory_hostname == 'principal'
-
-    - name: Escalar el servicio route-scheduler a 3 réplicas
-      shell: docker service scale bus_stack_route-scheduler=3
-      when: inventory_hostname == 'principal'
-
+    - name: Inicializar Docker Swarm en el nodo principal
+      when: inventory_hostname == "principal"
+      shell: docker swarm init --advertise-addr 192.168.33.10
+      register: swarm_init_output
+      ignore_errors: yes
