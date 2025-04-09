@@ -1,4 +1,4 @@
-----
+---
 - name: Configuración común para nodos Docker
   hosts: all
   become: yes
@@ -15,7 +15,12 @@
 
     - name: Instalar paquetes necesarios
       ansible.builtin.apt:
-        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - git
         state: present
 
     - name: Clonar repositorio del proyecto
@@ -48,3 +53,4 @@
       shell: docker swarm init --advertise-addr 192.168.33.10
       register: swarm_init_output
       ignore_errors: yes
+
