@@ -1,0 +1,1 @@
+{"virtualbox":{"/vagrant":{"mount_options":["ro","uid=1000","gid=1000","_netdev"],"guestpath":"/vagrant","hostpath":"/Users/lupe/bus-app","disabled":false,"__vagrantfile":true}}}
