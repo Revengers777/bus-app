@@ -5,7 +5,7 @@ services:
     image: revengers0/my-proxy:latest
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 1
     ports:
       - "80:80"
     networks:

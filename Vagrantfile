@@ -9,7 +9,7 @@ Vagrant.configure("2") do |config|
     usermod -aG docker vagrant
   SHELL
 
-  # Carpeta sincronizada (solo lectura para prevenir sobrescrituras accidentales)
+  # Carpeta sincronizada (con permisos de lectura y escritura)
   shared_folder_host = "."
   shared_folder_guest = "/vagrant"
 
@@ -23,7 +23,7 @@ Vagrant.configure("2") do |config|
       vb.memory = 1024
     end
     principal.vm.provision "shell", inline: docker_install_script
-    principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["ro"]
+    principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["dmode=775", "fmode=775"]
   end
 
   # Nodo esclavo (antes nodo1)
@@ -35,6 +35,6 @@ Vagrant.configure("2") do |config|
       vb.memory = 1024
     end
     esclavo.vm.provision "shell", inline: docker_install_script
-    esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["ro"]
+    esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["dmode=775", "fmode=775"]
   end
 end
