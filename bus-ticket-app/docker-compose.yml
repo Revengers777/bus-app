@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   proxy:
-    image: my-proxy:latest
+    image: revengers0/my-proxy:latest
     deploy:
       mode: replicated
       replicas: 2
@@ -15,22 +15,22 @@ services:
         target: /etc/nginx/nginx.conf
 
   user-auth:
-    image: mi_app/user-auth:latest
+    image: revengers0/user-auth:latest
     networks:
       - app-network
 
   bus-reservation:
-    image: mi_app/bus-reservation:latest
+    image: revengers0/bus-reservation:latest
     networks:
       - app-network
 
   payment-gateway:
-    image: mi_app/payment-gateway:latest
+    image: revengers0/payment-gateway:latest
     networks:
       - app-network
 
   route-scheduler:
-    image: mi_app/route-scheduler:latest
+    image: revengers0/route-scheduler:latest
     networks:
       - app-network
 
