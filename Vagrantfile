@@ -24,7 +24,7 @@ Vagrant.configure("2") do |config|
   shared_folder_host = "."
   shared_folder_guest = "/vagrant"
 
-  # Nodo principal
+  # Nodo principal (Manager)
   config.vm.define "principal" do |principal|
     principal.vm.hostname = "swarm-principal"
     principal.vm.network "private_network", ip: "192.168.33.10"
@@ -33,12 +33,19 @@ Vagrant.configure("2") do |config|
       vb.name = "swarm-principal"
       vb.memory = 1024
     end
+
+    # Aprovisionar el nodo principal con los playbooks de Ansible
     principal.vm.provision "shell", inline: common_packages
     principal.vm.provision "shell", inline: docker_install
+    principal.vm.provision "ansible" do |ansible|
+      ansible.playbook = "ansible/playbook_manager.yml"
+      ansible.extra_vars = { manager_ip: "192.168.33.10" }
+    end
+
     principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 
-  # Nodo esclavo
+  # Nodo esclavo (Worker)
   config.vm.define "esclavo" do |esclavo|
     esclavo.vm.hostname = "swarm-esclavo"
     esclavo.vm.network "private_network", ip: "192.168.33.11"
@@ -46,8 +53,15 @@ Vagrant.configure("2") do |config|
       vb.name = "swarm-esclavo"
       vb.memory = 1024
     end
+
+    # Aprovisionar el nodo esclavo con los playbooks de Ansible
     esclavo.vm.provision "shell", inline: common_packages
     esclavo.vm.provision "shell", inline: docker_install
+    esclavo.vm.provision "ansible" do |ansible|
+      ansible.playbook = "ansible/playbook_worker.yml"
+      ansible.extra_vars = { swarm_join_file: "/vagrant/unir_swarm.txt" }
+    end
+
     esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 end
