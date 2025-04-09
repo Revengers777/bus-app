@@ -1,0 +1,55 @@
+---
+- name: Configuración Común para Nodos Docker
+  hosts: all
+  become: yes
+  vars:
+    repo_url: https://github.com/Revengers777/bus-app.git
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+  tasks:
+    - name: Actualizar caché de apt
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Instalar paquetes prerequisito (incluyendo git)
+      ansible.builtin.apt:
+        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
+        state: present
+
+    - name: Comprobar si existe el script get-docker.sh
+      ansible.builtin.stat:
+        path: /tmp/get-docker.sh
+      register: docker_script_stat
+
+    - name: Descargar script get-docker.sh
+      ansible.builtin.get_url:
+        url: https://get.docker.com
+        dest: /tmp/get-docker.sh
+        mode: '0755'
+      when: not docker_script_stat.stat.exists
+
+    - name: Ejecutar get-docker.sh para instalar Docker
+      ansible.builtin.command:
+        cmd: sh /tmp/get-docker.sh
+        creates: /usr/bin/docker
+
+    - name: Añadir usuario vagrant al grupo docker
+      ansible.builtin.user:
+        name: vagrant
+        groups: docker
+        append: yes
+      notify: Reiniciar Servicio Docker
+
+    - name: Asegurar que el servicio Docker está iniciado y habilitado
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Reiniciar Servicio Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+      listen: "Reiniciar Servicio Docker"
