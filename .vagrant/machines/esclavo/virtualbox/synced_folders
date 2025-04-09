@@ -1,1 +1,0 @@
-{"virtualbox":{"/vagrant":{"mount_options":["dmode=775","fmode=775","uid=1000","gid=1000","_netdev"],"guestpath":"/vagrant","hostpath":"C:/Users/Mananas/prueba1/bus-app","disabled":false,"__vagrantfile":true}}}
