@@ -54,7 +54,7 @@
 
     - name: Desplegar Stack Docker
       ansible.builtin.command:
-        cmd: docker stack deploy -c docker-stack.yml bus_stack  # Nombrando el stack 'bus_stack' para ser original
+        cmd: docker stack deploy -c {{ app_build_dir }}/docker-compose.yml bus_stack  # Usamos docker-compose.yml
         chdir: "{{ app_build_dir }}"  # Usa la variable heredada para el directorio correcto
       register: stack_deploy_result
       changed_when: "'Creating network' in stack_deploy_result.stdout or 'Updating service' in stack_deploy_result.stdout"
