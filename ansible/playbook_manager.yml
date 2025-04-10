@@ -9,19 +9,19 @@
   vars:
     swarm_join_file: /vagrant/unir_swarm.txt
     repo_dest: /vagrant/bus-app 
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/" # Directorio para build/deploy
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
   tasks:
     - name: Esperar a que el archivo del comando de unión esté creado por el manager
       ansible.builtin.wait_for:
         path: "{{ swarm_join_file }}"
         state: present
-        timeout: 120 # Espera hasta 2 minutos
+        timeout: 120  # Espera hasta 2 minutos
 
     - name: Leer el comando de unión desde el archivo
       ansible.builtin.command:
         cmd: "cat {{ swarm_join_file }}"
       register: join_cmd_output
-      changed_when: false # Leer un archivo no cambia el estado
+      changed_when: false  # Leer un archivo no cambia el estado
 
     - name: Unirse al Docker Swarm
       ansible.builtin.command:
@@ -39,11 +39,11 @@
       register: compose_build_result
       changed_when: "'Successfully built' in compose_build_result.stdout"
 
-    - name: Crear un servicio de Docker en el Swarm
-      docker_service:
+    - name: Crear un servicio en Docker Swarm
+      community.docker.docker_swarm:
         name: busapp
-        image: "{{ repo_dest }}/bus-ticket-app"  # Cambia esto por la ruta correcta de tu imagen Docker
-        args: "--replicas 3"  # Cambia el número de réplicas según tus necesidades
+        image: "{{ repo_dest }}/bus-ticket-app:latest"  # Cambia esto por la ruta correcta de tu imagen Docker
+        replicas: 3  # Cambia el número de réplicas según tus necesidades
         state: present
       register: service_result
 
