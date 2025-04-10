@@ -1,14 +1,17 @@
 Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-22.04"
 
-  is_windows = RUBY_PLATFORM =~ /mingw|mswin/
+  # Detectar si el host es Windows
+  is_windows = !!(RUBY_PLATFORM =~ /mingw|mswin/)
 
+  # Script común
   common_packages = <<-SHELL
     apt-get update
     apt-get install -y curl python3-pip jq git net-tools
     pip3 install ansible
   SHELL
 
+  # Instalación de Docker y Docker Compose
   docker_install = <<-SHELL
     curl -fsSL https://get.docker.com -o get-docker.sh
     sh get-docker.sh
@@ -22,51 +25,43 @@ Vagrant.configure("2") do |config|
   shared_folder_host = "."
   shared_folder_guest = "/vagrant"
 
-  config.vm.define "principal" do |principal|
-    principal.vm.hostname = "swarm-principal"
-    principal.vm.network "private_network", ip: "192.168.33.10"
-    principal.vm.network "forwarded_port", guest: 80, host: 8080
-    principal.vm.provider "virtualbox" do |vb|
-      vb.name = "swarm-principal"
-      vb.memory = 1024
-    end
-    principal.vm.provision "shell", inline: common_packages
-    principal.vm.provision "shell", inline: docker_install
+  # Config para cada VM
+  ["principal", "esclavo"].each_with_index do |name, i|
+    config.vm.define name do |node|
+      node.vm.hostname = "swarm-#{name}"
+      node.vm.network "private_network", ip: "192.168.33.1#{i}"
 
-    if is_windows
-      principal.vm.provision "shell", inline: <<-SHELL
-        cd /vagrant/ansible
-        ansible-playbook playbook_common.yml -i inventory.yml
-      SHELL
-    else
-      principal.vm.provision "ansible" do |ansible|
-        ansible.playbook = "ansible/playbook_common.yml"
+      # Solo el principal expone el puerto 80
+      if name == "principal"
+        node.vm.network "forwarded_port", guest: 80, host: 8080
       end
-    end
 
-    principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
+      node.vm.provider "virtualbox" do |vb|
+        vb.name = "swarm-#{name}"
+        vb.memory = 1024
+      end
+
+      node.vm.provision "shell", inline: common_packages
+      node.vm.provision "shell", inline: docker_install
+
+      if is_windows
+        # Windows: usar ansible dentro de la VM
+        node.vm.provision "shell", inline: <<-SHELL
+          cd /vagrant/ansible
+          ansible-playbook playbook_common.yml -i inventory.yml
+        SHELL
+      else
+        # No Windows: Ansible como provisioner externo
+        node.vm.provision "ansible" do |ansible|
+          ansible.playbook = "ansible/playbook_common.yml"
+        end
+      end
+
+      node.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
+    end
   end
+end
 
-  config.vm.define "esclavo" do |esclavo|
-    esclavo.vm.hostname = "swarm-esclavo"
-    esclavo.vm.network "private_network", ip: "192.168.33.11"
-    esclavo.vm.provider "virtualbox" do |vb|
-      vb.name = "swarm-esclavo"
-      vb.memory = 1024
-    end
-    esclavo.vm.provision "shell", inline: common_packages
-    esclavo.vm.provision "shell", inline: docker_install
-
-    if is_windows
-      esclavo.vm.provision "shell", inline: <<-SHELL
-        cd /vagrant/ansible
-        ansible-playbook playbook_common.yml -i inventory.yml
-      SHELL
-    else
-      esclavo.vm.provision "ansible" do |ansible|
-        ansible.playbook = "ansible/playbook_common.yml"
-      end
-    end
 
     esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
