@@ -1,72 +1,71 @@
 ---
-- name: Configuración Específica del Nodo Manager (Principal)
-  hosts: principal
-  become: yes
-  vars:
-    swarm_join_file: /vagrant/unir_swarm.txt  # Ruta del archivo de unión
-    repo_dest: /vagrant/bus-app
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
-  tasks:
-    - name: Construir imágenes de la aplicación con docker compose
-      ansible.builtin.command:
-        cmd: docker compose build
-        chdir: "{{ app_build_dir }}"
-      environment:
-        COMPOSE_PROJECT_NAME: busapp
-      register: compose_build_result
-      changed_when: "'Successfully built' in compose_build_result.stdout"
-
-    - name: Inicializar Docker Swarm en el nodo principal (manager)
-      ansible.builtin.shell:
-        cmd: "docker swarm init --advertise-addr {{ ansible_default_ipv4.address }}"
-      register: swarm_init_result
-      failed_when: "'This node is already a manager' not in swarm_init_result.stdout"
-      changed_when: "'Swarm initialized' in swarm_init_result.stdout"
-
-    - name: Obtener el token de unión del nodo principal para los nodos worker
-      ansible.builtin.shell:
-        cmd: "docker swarm join-token worker -q"
-      register: swarm_join_token
-      changed_when: false
-
-    - name: Crear archivo de unión para los nodos worker
-      ansible.builtin.copy:
-        content: "docker swarm join --token {{ swarm_join_token.stdout }} {{ ansible_default_ipv4.address }}:2377"
-        dest: "{{ swarm_join_file }}"
-      when: swarm_init_result.changed
-
-- name: Configuración Específica del Nodo Worker
+# playbook_common.yml
+- name: Configuración Común para Nodos Docker
   hosts: all
-  become: yes
+  become: yes  # La mayoría de las tareas requieren privilegios de root
   vars:
-    swarm_join_file: /vagrant/unir_swarm.txt
-    repo_dest: /vagrant/bus-app
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+    repo_url: https://github.com/Revengers777/bus-app.git  # Usamos tu repositorio
+    repo_dest: /vagrant/bus-app  # Destino dentro del invitado (corresponde a ./bus-app en el host)
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
+
   tasks:
-    - name: Construir imágenes de la aplicación con docker compose
-      ansible.builtin.command:
-        cmd: docker compose build
-        chdir: "{{ app_build_dir }}"
-      environment:
-        COMPOSE_PROJECT_NAME: busapp
-      register: compose_build_result
-      changed_when: "'Successfully built' in compose_build_result.stdout"
+    - name: Actualizar caché de apt
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600  # Actualizar solo si la caché tiene más de 1 hora
 
-    - name: Esperar a que el archivo del comando de unión sea creado por el manager
-      ansible.builtin.wait_for:
-        path: "{{ swarm_join_file }}"
+    - name: Instalar paquetes prerrequisito (incluyendo git)
+      ansible.builtin.apt:
+        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
         state: present
-        timeout: 300  # Aumentamos el tiempo de espera a 5 minutos
 
-    - name: Leer el comando de unión desde el archivo
-      ansible.builtin.command:
-        cmd: "cat {{ swarm_join_file }}"
-      register: join_cmd_output
-      changed_when: false
+    - name: Clonar el repositorio bus-app
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"  # Usamos tu repositorio
+        dest: "{{ repo_dest }}"  # La carpeta donde clonaremos el repositorio
+        clone: yes
+        update: yes
 
-    - name: Unirse al Docker Swarm
-      ansible.builtin.command:
-        cmd: "{{ join_cmd_output.stdout | trim }}"
-      register: swarm_join_result
-      failed_when: "'Error response from daemon' in swarm_join_result.stderr and 'This node is already part of a swarm' not in swarm_join_result.stderr"
-      changed_when: "'This node joined a swarm as a worker' in swarm_join_result.stdout"
+    - name: Instalar Docker Compose
+      ansible.builtin.shell:
+        cmd: |
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
+        creates: /usr/bin/docker-compose
+      register: docker_compose_installed
+      changed_when: docker_compose_installed.stdout != ''
+      failed_when: docker_compose_installed.rc != 0
+      become: yes
+      become_user: root
+
+    - name: Verificar instalación de Docker Compose
+      command: docker-compose --version
+      register: docker_compose_version
+      ignore_errors: yes  # Esto asegura que no falle la tarea si hay un error o una advertencia.
+
+    - name: Mostrar versión de Docker Compose
+      debug:
+        msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
+
+    # Escalado de servicios en Docker Swarm
+    - name: Escalar el servicio proxy a 2 réplicas
+      shell: docker service scale bus_stack_proxy=2
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio user-auth a 3 réplicas
+      shell: docker service scale bus_stack_user-auth=3
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio bus-reservation a 3 réplicas
+      shell: docker service scale bus_stack_bus-reservation=3
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio payment-gateway a 3 réplicas
+      shell: docker service scale bus_stack_payment-gateway=3
+      when: inventory_hostname == 'principal'
+
+    - name: Escalar el servicio route-scheduler a 3 réplicas
+      shell: docker service scale bus_stack_route-scheduler=3
+      when: inventory_hostname == 'principal'
