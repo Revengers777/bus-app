@@ -13,8 +13,6 @@ Vagrant.configure("2") do |config|
     curl -fsSL https://get.docker.com -o get-docker.sh
     sh get-docker.sh
     usermod -aG docker vagrant
-
-    # Instalar Docker Compose plugin (v2)
     mkdir -p /usr/local/lib/docker/cli-plugins
     curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
@@ -35,8 +33,15 @@ Vagrant.configure("2") do |config|
     end
     principal.vm.provision "shell", inline: common_packages
     principal.vm.provision "shell", inline: docker_install
-    principal.vm.provision "ansible" do |ansible|
-      ansible.playbook = "ansible/playbook_common.yml"  # Ruta correcta al playbook dentro de la carpeta 'ansible'
+    principal.vm.provision "ansible_local" do |ansible|
+      ansible.compatibility_mode = "auto"
+      ansible.provisioning_path = "/vagrant/"
+      ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
+      ansible.inventory = "192.168.33.10,"  # Nodo principal directamente por IP
+      ansible.limit = "principal"
+      ansible.install = false
+      ansible.verbose = "v"
+      ansible.extra_vars = { ansible_python_interpreter: '/usr/bin/python3' }
     end
     principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
@@ -51,11 +56,17 @@ Vagrant.configure("2") do |config|
     end
     esclavo.vm.provision "shell", inline: common_packages
     esclavo.vm.provision "shell", inline: docker_install
-    esclavo.vm.provision "ansible" do |ansible|
-      ansible.playbook = "ansible/playbook_common.yml"  # Ruta correcta al playbook dentro de la carpeta 'ansible'
+    esclavo.vm.provision "ansible_local" do |ansible|
+      ansible.compatibility_mode = "auto"
+      ansible.provisioning_path = "/vagrant/"
+      ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
+      ansible.inventory = "192.168.33.11,"  # Nodo esclavo directamente por IP
+      ansible.limit = "esclavo"
+      ansible.install = false
+      ansible.verbose = "v"
+      ansible.extra_vars = { ansible_python_interpreter: '/usr/bin/python3' }
     end
     esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 end
-
 
