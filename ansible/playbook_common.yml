@@ -1,104 +1,36 @@
 ---
-- name: Configuración Común para Nodos Docker
+- name: Configuración Específica del Nodo Worker
   hosts: all
-  become: yes  # La mayoría de las tareas requieren privilegios de root
+  become: yes
   vars:
-    repo_url: https://github.com/Revengers777/bus-app.git  # Usamos tu repositorio
-    repo_dest: /vagrant/bus-app  # Destino dentro del invitado (corresponde a ./bus-app en el host)
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
-    docker_images:
-      - revengers0/my-proxy:latest
-      - revengers0/user-auth:latest
-      - revengers0/bus-reservation:latest
-      - revengers0/payment-gateway:latest
-      - revengers0/route-scheduler:latest
-    swarm_advertise_addr: "192.168.33.10"  # IP específica para Docker Swarm
-
+    swarm_join_file: /vagrant/unir_swarm.txt
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
   tasks:
-    - name: Actualizar caché de apt
-      ansible.builtin.apt:
-        update_cache: yes
-        cache_valid_time: 3600  # Actualizar solo si la caché tiene más de 1 hora
+    - name: Construir imágenes de la aplicación con docker compose
+      ansible.builtin.command:
+        cmd: docker compose build
+        chdir: "{{ app_build_dir }}"
+      environment:
+        COMPOSE_PROJECT_NAME: busapp
+      register: compose_build_result
+      changed_when: "'Successfully built' in compose_build_result.stdout"
 
-    - name: Instalar paquetes prerrequisito (incluyendo git)
-      ansible.builtin.apt:
-        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
+    - name: Esperar a que el archivo del comando de unión sea creado por el manager
+      ansible.builtin.wait_for:
+        path: "{{ swarm_join_file }}"
         state: present
+        timeout: 120
 
-    - name: Clonar el repositorio bus-app
-      ansible.builtin.git:
-        repo: "{{ repo_url }}"  # Usamos tu repositorio
-        dest: "{{ repo_dest }}"  # La carpeta donde clonaremos el repositorio
-        clone: yes
-        update: yes
+    - name: Leer el comando de unión desde el archivo
+      ansible.builtin.command:
+        cmd: "cat {{ swarm_join_file }}"
+      register: join_cmd_output
+      changed_when: false
 
-    - name: Instalar Docker Compose
-      ansible.builtin.shell:
-        cmd: |
-          sudo mkdir -p /usr/local/lib/docker/cli-plugins
-          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-          sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
-        creates: /usr/bin/docker-compose
-      register: docker_compose_installed
-      changed_when: docker_compose_installed.stdout != ''
-      failed_when: docker_compose_installed.rc != 0
-      become: yes
-      become_user: root
-
-    - name: Verificar instalación de Docker Compose
-      command: docker-compose --version
-      register: docker_compose_version
-      ignore_errors: yes  # Esto asegura que no falle la tarea si hay un error o una advertencia.
-
-    - name: Mostrar versión de Docker Compose
-      debug:
-        msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
-
-    # Detectar el sistema operativo
-    - name: Detectar el sistema operativo
-      debug:
-        msg: "El sistema operativo es {{ ansible_facts['os_family'] }}"
-
-    # Si es Windows
-    - name: Configuración especial para Windows
-      when: ansible_facts['os_family'] == "Windows"
-      block:
-        - name: Instalar Docker para Windows
-          win_chocolatey:
-            name: docker-desktop
-            state: present
-        - name: Mostrar mensaje para Windows
-          debug:
-            msg: "Se están aplicando configuraciones para Windows."
-
-    # Si es MacOS
-    - name: Configuración especial para MacOS
-      when: ansible_facts['os_family'] == "Darwin"
-      block:
-        - name: Instalar Homebrew
-          homebrew:
-            name: docker
-            state: present
-        - name: Mostrar mensaje para MacOS
-          debug:
-            msg: "Se están aplicando configuraciones para MacOS."
-
-    # Si es Linux
-    - name: Configuración común para Linux
-      when: ansible_facts['os_family'] == "Linux"
-      block:
-        - name: Inicializar Docker Swarm
-          ansible.builtin.shell:
-            cmd: "docker swarm init --advertise-addr {{ swarm_advertise_addr }}"
-          when: inventory_hostname == "principal"
-        - name: Crear la red overlay para Docker Swarm
-          ansible.builtin.shell:
-            cmd: "docker network create --driver=overlay app-network"
-          when: inventory_hostname == "principal"
-        - name: Descargar imágenes de Docker desde Docker Hub
-          docker_image:
-            name: "{{ item }}"
-            source: pull
-          with_items: "{{ docker_images }}"
-          when: inventory_hostname == "principal"
+    - name: Unirse al Docker Swarm
+      ansible.builtin.command:
+        cmd: "{{ join_cmd_output.stdout | trim }}"
+      register: swarm_join_result
+      failed_when: "'Error response from daemon' in swarm_join_result.stderr and 'This node is already part of a swarm' not in swarm_join_result.stderr"
+      changed_when: "'This node joined a swarm as a worker' in swarm_join_result.stdout"
