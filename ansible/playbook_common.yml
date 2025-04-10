@@ -22,8 +22,14 @@
 
     - name: Instalar paquetes prerequisito (incluyendo git)
       ansible.builtin.apt:
-        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
+        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git', 'python3-pip']
         state: present
+
+    - name: Instalar la librería Docker para Python
+      ansible.builtin.pip:
+        name: docker
+        state: present
+        executable: pip3
 
     - name: Clonar el repositorio bus-app
       ansible.builtin.git:
