@@ -31,3 +31,4 @@
       ansible.builtin.command:
         cmd: docker-compose -f /vagrant/bus-app/bus-ticket-app/docker-compose.yml up -d
         chdir: "{{ app_build_dir }}"
+
