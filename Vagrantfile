@@ -37,7 +37,6 @@ Vagrant.configure("2") do |config|
       ansible.compatibility_mode = "auto"
       ansible.provisioning_path = "/vagrant/"
       ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
-      ansible.inventory = "192.168.33.10,"  # Nodo principal directamente por IP
       ansible.limit = "principal"
       ansible.install = false
       ansible.verbose = "v"
@@ -60,7 +59,6 @@ Vagrant.configure("2") do |config|
       ansible.compatibility_mode = "auto"
       ansible.provisioning_path = "/vagrant/"
       ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
-      ansible.inventory = "192.168.33.11,"  # Nodo esclavo directamente por IP
       ansible.limit = "esclavo"
       ansible.install = false
       ansible.verbose = "v"
