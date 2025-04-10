@@ -22,7 +22,7 @@ Vagrant.configure("2") do |config|
   shared_folder_host = "."
   shared_folder_guest = "/vagrant"
 
-  # Nodo principal
+  # Nodo principal (Manager)
   config.vm.define "principal" do |principal|
     principal.vm.hostname = "swarm-principal"
     principal.vm.network "private_network", ip: "192.168.33.10"
@@ -36,7 +36,7 @@ Vagrant.configure("2") do |config|
     principal.vm.provision "ansible_local" do |ansible|
       ansible.compatibility_mode = "auto"
       ansible.provisioning_path = "/vagrant/"
-      ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
+      ansible.playbook = "ansible/playbook_manager.yml"  # Usamos el playbook para el nodo manager
       ansible.limit = "principal"
       ansible.install = false
       ansible.verbose = "v"
@@ -45,7 +45,7 @@ Vagrant.configure("2") do |config|
     principal.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
 
-  # Nodo esclavo
+  # Nodo esclavo (Worker)
   config.vm.define "esclavo" do |esclavo|
     esclavo.vm.hostname = "swarm-esclavo"
     esclavo.vm.network "private_network", ip: "192.168.33.11"
@@ -58,7 +58,7 @@ Vagrant.configure("2") do |config|
     esclavo.vm.provision "ansible_local" do |ansible|
       ansible.compatibility_mode = "auto"
       ansible.provisioning_path = "/vagrant/"
-      ansible.playbook = "ansible/playbook_common.yml"  # Este es tu playbook de configuración
+      ansible.playbook = "ansible/playbook_worker.yml"  # Usamos el playbook para el nodo worker
       ansible.limit = "esclavo"
       ansible.install = false
       ansible.verbose = "v"
