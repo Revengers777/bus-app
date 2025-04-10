@@ -78,5 +78,26 @@ Vagrant.configure("2") do |config|
 
     esclavo.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
   end
-end
 
+  config.vm.define "principal_scale" do |principal_scale|
+    principal_scale.vm.hostname = "swarm-principal-scale"
+    principal_scale.vm.network "private_network", ip: "192.168.33.12"
+    principal_scale.vm.provider "virtualbox" do |vb|
+      vb.name = "swarm-principal-scale"
+      vb.memory = 1024
+    end
+
+    if is_windows
+      principal_scale.vm.provision "shell", inline: <<-SHELL
+        cd /vagrant/ansible
+        ansible-playbook playbook_scale.yml -i inventory.yml
+      SHELL
+    else
+      principal_scale.vm.provision "ansible" do |ansible|
+        ansible.playbook = "ansible/playbook_scale.yml"
+      end
+    end
+
+    principal_scale.vm.synced_folder shared_folder_host, shared_folder_guest, mount_options: ["rw"]
+  end
+end
