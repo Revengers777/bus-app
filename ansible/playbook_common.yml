@@ -1,5 +1,4 @@
 ---
-# playbook_common.yml
 - name: Configuración Común para Nodos Docker
   hosts: all
   become: yes  # La mayoría de las tareas requieren privilegios de root
@@ -56,30 +55,50 @@
       debug:
         msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
 
-    - name: Inicializar Docker Swarm en el nodo principal
-      shell: |
-        docker swarm init --advertise-addr {{ swarm_advertise_addr }}
-      when: inventory_hostname == 'principal'
-      register: swarm_init
-      ignore_errors: yes
+    # Detectar el sistema operativo
+    - name: Detectar el sistema operativo
+      debug:
+        msg: "El sistema operativo es {{ ansible_facts['os_family'] }}"
 
-    - name: Crear la red overlay para Docker Swarm
-      shell: |
-        docker network create --driver=overlay app-network
-      when: inventory_hostname == 'principal'
-      register: network_create
-      ignore_errors: yes
+    # Si es Windows
+    - name: Configuración especial para Windows
+      when: ansible_facts['os_family'] == "Windows"
+      block:
+        - name: Instalar Docker para Windows
+          win_chocolatey:
+            name: docker-desktop
+            state: present
+        - name: Mostrar mensaje para Windows
+          debug:
+            msg: "Se están aplicando configuraciones para Windows."
 
-    - name: Descargar imágenes de Docker desde Docker Hub
-      docker_image:
-        name: "{{ item }}"
-        source: pull
-      with_items: "{{ docker_images }}"
-      when: inventory_hostname == 'principal'
+    # Si es MacOS
+    - name: Configuración especial para MacOS
+      when: ansible_facts['os_family'] == "Darwin"
+      block:
+        - name: Instalar Homebrew
+          homebrew:
+            name: docker
+            state: present
+        - name: Mostrar mensaje para MacOS
+          debug:
+            msg: "Se están aplicando configuraciones para MacOS."
 
-    - name: Desplegar la aplicación usando Docker Stack
-      shell: |
-        docker stack deploy -c {{ repo_dest }}/bus-ticket-app/docker-compose.yml bus_stack
-      when: inventory_hostname == 'principal'
-      register: stack_deploy
-      ignore_errors: yes
+    # Si es Linux
+    - name: Configuración común para Linux
+      when: ansible_facts['os_family'] == "Linux"
+      block:
+        - name: Inicializar Docker Swarm
+          ansible.builtin.shell:
+            cmd: "docker swarm init --advertise-addr {{ swarm_advertise_addr }}"
+          when: inventory_hostname == "principal"
+        - name: Crear la red overlay para Docker Swarm
+          ansible.builtin.shell:
+            cmd: "docker network create --driver=overlay app-network"
+          when: inventory_hostname == "principal"
+        - name: Descargar imágenes de Docker desde Docker Hub
+          docker_image:
+            name: "{{ item }}"
+            source: pull
+          with_items: "{{ docker_images }}"
+          when: inventory_hostname == "principal"
