@@ -13,7 +13,7 @@
         advertise_addr: "{{ ansible_host }}"
       register: swarm_init_result
       failed_when: false
-      changed_when: "'Swarm initialized' in swarm_init_result.stdout"
+      changed_when: swarm_init_result.changed
 
     - name: Crear archivo con el comando de unión al Swarm (solo para manager)
       ansible.builtin.copy:
@@ -62,4 +62,3 @@
     - name: Verificar si el servicio se creó correctamente
       debug:
         msg: "Servicio desplegado correctamente: {{ compose_up_result.stdout }}"
-
