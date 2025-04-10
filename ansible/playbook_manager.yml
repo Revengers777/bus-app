@@ -11,9 +11,9 @@
   vars:
     swarm_join_file: /vagrant/unir_swarm.txt # Define la ruta para el archivo del comando de join
     manager_ip: 192.168.33.10 # Define explícitamente la IP del manager aquí
-    repo_url: https://github.com/Revengers777/bus-app.git # Cambia la URL de tu repositorio
-    repo_dest: /vagrant/bus-app # El volcado del git
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/" # Directorio para build/deploy
+    repo_url: https://github.com/ricardoinstructor/bus-app.git
+    repo_dest: /vagrant/bus-app # el volcado del git
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/" # Directorio para build/deploy    
   tasks:
     - name: Clonar o actualizar el repositorio de la aplicación
       ansible.builtin.git:
@@ -51,9 +51,10 @@
         content: "{{ swarm_join_command.stdout }}"
         dest: "{{ swarm_join_file }}"
 
-    - name: Desplegar Stack Docker
+    # Desplegar la aplicación con Docker Compose (modificación)
+    - name: Desplegar aplicación con Docker Compose
       ansible.builtin.command:
-        cmd: docker stack deploy -c docker-stack.yml bus_stack # Nombrando el stack 'bus_stack' así para ser original
+        cmd: docker-compose -f docker-compose.yml up -d
         chdir: "{{ app_build_dir }}" # Usa la variable heredada para el directorio correcto
-      register: stack_deploy_result
-      changed_when: "'Creating network' in stack_deploy_result.stdout or 'Updating service' in stack_deploy_result.stdout"
+      register: compose_deploy_result
+      changed_when: "'Creating network' in compose_deploy_result.stdout or 'Starting' in compose_deploy_result.stdout"
