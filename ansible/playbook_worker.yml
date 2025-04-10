@@ -2,23 +2,24 @@
   hosts: all
   become: yes
   vars:
-    manager_ip: 192.168.33.10
+    swarm_join_file: /vagrant/unir_swarm.txt
     repo_dest: /vagrant/bus-app
     app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
   tasks:
-    - name: Unirse al swarm con el token recibido del manager
-      ansible.builtin.command:
-        cmd: "docker swarm join --token {{ hostvars['manager_host']['swarm_worker_token'] }} {{ manager_ip }}:2377"
+    - name: Esperar a que el archivo de unión esté disponible
+      ansible.builtin.wait_for:
+        path: "{{ swarm_join_file }}"
+        state: present
+        timeout: 120
+    
+    - name: Leer el comando de unión desde el archivo
+      ansible.builtin.command: "cat {{ swarm_join_file }}"
+      register: join_cmd_output
+      changed_when: false
+    
+    - name: Unirse al Docker Swarm
+      ansible.builtin.command: "{{ join_cmd_output.stdout | trim }}"
       register: swarm_join_result
       failed_when: "'Error response from daemon' in swarm_join_result.stderr and 'This node is already part of a swarm' not in swarm_join_result.stderr"
       changed_when: "'This node joined a swarm as a worker' in swarm_join_result.stdout"
-
-    - name: Construir imágenes de la aplicación con docker compose
-      ansible.builtin.command:
-        cmd: docker compose build
-        chdir: "{{ app_build_dir }}"
-      environment:
-        COMPOSE_PROJECT_NAME: busapp
-      register: compose_build_result
-      changed_when: "'Successfully built' in compose_build_result.stdout"
 
