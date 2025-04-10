@@ -1,54 +1,100 @@
 ---
-- name: Escalar servicios del stack
-  hosts: principal
+# playbook_common.yml
+- name: Configuración Común para Nodos Docker
+  hosts: all
   become: yes
+  vars:
+    repo_url: https://github.com/Revengers777/bus-app.git
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+    docker_images:
+      - revengers0/my-proxy:latest
+      - revengers0/user-auth:latest
+      - revengers0/bus-reservation:latest
+      - revengers0/payment-gateway:latest
+      - revengers0/route-scheduler:latest
+    swarm_advertise_addr: "192.168.33.10"
+    manager_ip: "192.168.33.10"  # IP del nodo principal (maestro)
   tasks:
-    - name: Escalar el servicio proxy a 2 réplicas
-      shell: docker service scale bus_stack_proxy=2
-      register: scale_result_proxy
-      failed_when: scale_result_proxy.rc != 0
-      changed_when: scale_result_proxy.rc == 0
+    - name: Actualizar caché de apt
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
 
-    - name: Escalar el servicio user-auth a 2 réplicas
-      shell: docker service scale bus_stack_user-auth=2
-      register: scale_result_auth
-      failed_when: scale_result_auth.rc != 0
-      changed_when: scale_result_auth.rc == 0
+    - name: Instalar paquetes prerrequisito (incluyendo git)
+      ansible.builtin.apt:
+        name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
+        state: present
 
-    - name: Escalar el servicio bus-reservation a 2 réplicas
-      shell: docker service scale bus_stack_bus-reservation=2
-      register: scale_result_reservation
-      failed_when: scale_result_reservation.rc != 0
-      changed_when: scale_result_reservation.rc == 0
+    - name: Clonar el repositorio bus-app
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
+        clone: yes
+        update: yes
 
-    - name: Escalar el servicio payment-gateway a 2 réplicas
-      shell: docker service scale bus_stack_payment-gateway=2
-      register: scale_result_payment
-      failed_when: scale_result_payment.rc != 0
-      changed_when: scale_result_payment.rc == 0
+    - name: Instalar Docker Compose
+      ansible.builtin.shell:
+        cmd: |
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
+        creates: /usr/bin/docker-compose
+      register: docker_compose_installed
+      changed_when: docker_compose_installed.stdout != ''
+      failed_when: docker_compose_installed.rc != 0
+      become: yes
+      become_user: root
 
-    - name: Escalar el servicio route-scheduler a 2 réplicas
-      shell: docker service scale bus_stack_route-scheduler=2
-      register: scale_result_scheduler
-      failed_when: scale_result_scheduler.rc != 0
-      changed_when: scale_result_scheduler.rc == 0
+    - name: Verificar instalación de Docker Compose
+      command: docker-compose --version
+      register: docker_compose_version
+      ignore_errors: yes
 
-    - name: Mostrar resultado de escalado para proxy
+    - name: Mostrar versión de Docker Compose
       debug:
-        msg: "Escalado de servicio proxy: {{ scale_result_proxy.stdout }}"
+        msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
 
-    - name: Mostrar resultado de escalado para user-auth
-      debug:
-        msg: "Escalado de servicio user-auth: {{ scale_result_auth.stdout }}"
+    - name: Inicializar Docker Swarm en el nodo principal
+      shell: |
+        docker swarm init --advertise-addr {{ swarm_advertise_addr }}
+      when: inventory_hostname == 'principal'
+      register: swarm_init
+      ignore_errors: yes
 
-    - name: Mostrar resultado de escalado para bus-reservation
-      debug:
-        msg: "Escalado de servicio bus-reservation: {{ scale_result_reservation.stdout }}"
+    - name: Crear la red overlay para Docker Swarm
+      shell: |
+        docker network create --driver=overlay app-network
+      when: inventory_hostname == 'principal'
+      register: network_create
+      ignore_errors: yes
 
-    - name: Mostrar resultado de escalado para payment-gateway
-      debug:
-        msg: "Escalado de servicio payment-gateway: {{ scale_result_payment.stdout }}"
+    - name: Obtener token de worker para unir nodos
+      shell: |
+        docker swarm join-token -q worker
+      when: inventory_hostname == 'principal'
+      register: worker_token
+      changed_when: false
 
-    - name: Mostrar resultado de escalado para route-scheduler
-      debug:
-        msg: "Escalado de servicio route-scheduler: {{ scale_result_scheduler.stdout }}"
+    - name: Unir el nodo trabajador al clúster de Docker Swarm
+      shell: |
+        docker swarm join --token {{ worker_token.stdout }} {{ manager_ip }}:2377
+      when: inventory_hostname != 'principal'
+      register: join_result
+      failed_when: join_result.rc != 0
+      changed_when: join_result.rc == 0
+
+    - name: Descargar imágenes de Docker desde Docker Hub
+      docker_image:
+        name: "{{ item }}"
+        source: pull
+      with_items: "{{ docker_images }}"
+      when: inventory_hostname == 'principal'
+
+    - name: Desplegar la aplicación usando Docker Stack
+      shell: |
+        docker stack deploy -c {{ repo_dest }}/bus-ticket-app/docker-compose.yml bus_stack
+      when: inventory_hostname == 'principal'
+      register: stack_deploy
+      ignore_errors: yes
