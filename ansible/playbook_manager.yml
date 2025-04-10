@@ -1,14 +1,38 @@
 ---
+# Primero, ejecuta las tareas comunes de configuración (instalar docker, actualizar y poco más)
+- name: Importar playbook común
+  ansible.builtin.import_playbook: playbook_common.yml
+
+# Luego, ejecuta las tareas específicas del manager
 - name: Configuración Específica del Nodo Manager
-  hosts: all
+  hosts: all # Aunque ponga all, al no existir inventario es localhost 
   become: yes
+  # Define variables específicas del manager
   vars:
-    swarm_join_file: /vagrant/unir_swarm.txt
-    manager_ip: 192.168.33.10
-    repo_url: https://github.com/Revengers777/bus-app.git
-    repo_dest: /vagrant/bus-app
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+    swarm_join_file: /vagrant/unir_swarm.txt # Define la ruta para el archivo del comando de join
+    manager_ip: 192.168.33.10 # Define explícitamente la IP del manager aquí
+    repo_url: https://github.com/Revengers777/bus-app.git # Cambia la URL de tu repositorio
+    repo_dest: /vagrant/bus-app # El volcado del git
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/" # Directorio para build/deploy
   tasks:
+    - name: Clonar o actualizar el repositorio de la aplicación
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
+        version: main # o la rama/tag que necesites, 'main' es común ahora
+        clone: yes
+        update: yes # Intenta hacer 'git pull' si el repo ya existe
+
+    # Esto se ejecuta DESPUÉS de instalar docker
+    - name: Construir imágenes de la aplicación con docker compose
+      ansible.builtin.command:
+        cmd: docker compose build
+        chdir: "{{ app_build_dir }}" # Usa la variable para el directorio correcto
+      environment: # Pasa variables de entorno si son necesarias para compose
+        COMPOSE_PROJECT_NAME: busapp # Opcional: establece un nombre de proyecto
+      register: compose_build_result
+      changed_when: "'Successfully built' in compose_build_result.stdout"
+
     - name: Inicializar Docker Swarm
       ansible.builtin.command:
         cmd: "docker swarm init --advertise-addr {{ manager_ip }}"
@@ -17,33 +41,19 @@
       changed_when: "'Swarm initialized' in swarm_init_result.stdout"
 
     - name: Extraer la línea de comando exacta para unirse
-      ansible.builtin.shell: "docker swarm join-token worker | tail -2 | head -1"
+      ansible.builtin.shell:
+        cmd: >
+          docker swarm join-token worker | tail -2 | head -1
       register: swarm_join_command
-      changed_when: false
 
     - name: Guardar el comando en un archivo
       ansible.builtin.copy:
         content: "{{ swarm_join_command.stdout }}"
         dest: "{{ swarm_join_file }}"
 
-    - name: Instalar Docker Compose
-      ansible.builtin.shell: |
-        curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-      args:
-        creates: /usr/local/bin/docker-compose
-
-    - name: Verificar la instalación de Docker Compose
+    - name: Desplegar Stack Docker
       ansible.builtin.command:
-        cmd: docker-compose --version
-      register: docker_compose_version
-
-    - name: Mostrar versión de Docker Compose
-      ansible.builtin.debug:
-        msg: "Docker Compose instalado correctamente, versión: {{ docker_compose_version.stdout }}"
-
-    - name: Desplegar la aplicación con Docker Compose
-      ansible.builtin.command:
-        cmd: docker-compose -f docker-compose.yml up -d
-        chdir: "{{ app_build_dir }}"
-
+        cmd: docker stack deploy -c docker-stack.yml bus_stack # Nombrando el stack 'bus_stack' así para ser original
+        chdir: "{{ app_build_dir }}" # Usa la variable heredada para el directorio correcto
+      register: stack_deploy_result
+      changed_when: "'Creating network' in stack_deploy_result.stdout or 'Updating service' in stack_deploy_result.stdout"
