@@ -36,8 +36,8 @@ Vagrant.configure("2") do |config|
     if is_windows
       principal.vm.provision "shell", inline: <<-SHELL
         cd /vagrant/ansible
-        ansible-playbook playbook_common.yml -i inventory.yml
-        ansible-playbook playbook_manager.yml -i inventory.yml
+        ansible-playbook playbook_common.yml
+        ansible-playbook playbook_manager.yml
       SHELL
     else
       principal.vm.provision "ansible" do |ansible|
@@ -64,8 +64,8 @@ Vagrant.configure("2") do |config|
     if is_windows
       esclavo.vm.provision "shell", inline: <<-SHELL
         cd /vagrant/ansible
-        ansible-playbook playbook_common.yml -i inventory.yml
-        ansible-playbook playbook_worker.yml -i inventory.yml
+        ansible-playbook playbook_common.yml
+        ansible-playbook playbook_worker.yml
       SHELL
     else
       esclavo.vm.provision "ansible" do |ansible|
@@ -90,7 +90,7 @@ Vagrant.configure("2") do |config|
     if is_windows
       principal_scale.vm.provision "shell", inline: <<-SHELL
         cd /vagrant/ansible
-        ansible-playbook playbook_scale.yml -i inventory.yml
+        ansible-playbook playbook_scale.yml
       SHELL
     else
       principal_scale.vm.provision "ansible" do |ansible|
