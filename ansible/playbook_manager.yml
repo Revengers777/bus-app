@@ -1,3 +1,4 @@
+---
 - name: Configuración Específica del Nodo Manager
   hosts: all
   become: yes
@@ -25,7 +26,24 @@
         content: "{{ swarm_join_command.stdout }}"
         dest: "{{ swarm_join_file }}"
 
+    - name: Instalar Docker Compose
+      ansible.builtin.shell: |
+        curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+      args:
+        creates: /usr/local/bin/docker-compose
+
+    - name: Verificar la instalación de Docker Compose
+      ansible.builtin.command:
+        cmd: docker-compose --version
+      register: docker_compose_version
+
+    - name: Mostrar versión de Docker Compose
+      ansible.builtin.debug:
+        msg: "Docker Compose instalado correctamente, versión: {{ docker_compose_version.stdout }}"
+
     - name: Desplegar la aplicación con Docker Compose
       ansible.builtin.command:
         cmd: docker-compose -f docker-compose.yml up -d
         chdir: "{{ app_build_dir }}"
+
