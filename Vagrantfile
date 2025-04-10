@@ -37,10 +37,14 @@ Vagrant.configure("2") do |config|
       principal.vm.provision "shell", inline: <<-SHELL
         cd /vagrant/ansible
         ansible-playbook playbook_common.yml -i inventory.yml
+        ansible-playbook playbook_manager.yml -i inventory.yml
       SHELL
     else
       principal.vm.provision "ansible" do |ansible|
         ansible.playbook = "ansible/playbook_common.yml"
+      end
+      principal.vm.provision "ansible" do |ansible|
+        ansible.playbook = "ansible/playbook_manager.yml"
       end
     end
 
@@ -61,10 +65,14 @@ Vagrant.configure("2") do |config|
       esclavo.vm.provision "shell", inline: <<-SHELL
         cd /vagrant/ansible
         ansible-playbook playbook_common.yml -i inventory.yml
+        ansible-playbook playbook_worker.yml -i inventory.yml
       SHELL
     else
       esclavo.vm.provision "ansible" do |ansible|
         ansible.playbook = "ansible/playbook_common.yml"
+      end
+      esclavo.vm.provision "ansible" do |ansible|
+        ansible.playbook = "ansible/playbook_worker.yml"
       end
     end
 
