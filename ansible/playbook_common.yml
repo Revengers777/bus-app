@@ -1,4 +1,3 @@
----
 # playbook_common.yml
 - name: Configuración Común para Nodos Docker
   hosts: all
@@ -15,6 +14,8 @@
       - revengers0/route-scheduler:latest
     swarm_advertise_addr: "192.168.33.10"
     manager_ip: "192.168.33.10"  # IP del nodo principal (maestro)
+    swarm_join_file: /vagrant/unir_swarm.txt  # Ubicación del archivo de unión
+
   tasks:
     - name: Actualizar caché de apt
       ansible.builtin.apt:
@@ -77,6 +78,18 @@
       register: worker_token
       changed_when: false
 
+    - name: Crear archivo de unión para trabajadores
+      ansible.builtin.shell: "echo '{{ worker_token.stdout }}' > {{ swarm_join_file }}"
+      when: inventory_hostname == 'principal'
+      register: create_join_file
+      changed_when: create_join_file.rc == 0
+
+    - name: Copiar el archivo de unión al nodo trabajador
+      ansible.builtin.copy:
+        src: "{{ swarm_join_file }}"
+        dest: "{{ swarm_join_file }}"
+      when: inventory_hostname != 'principal'
+
     - name: Unir el nodo trabajador al clúster de Docker Swarm
       shell: |
         docker swarm join --token {{ worker_token.stdout }} {{ manager_ip }}:2377
@@ -98,3 +111,4 @@
       when: inventory_hostname == 'principal'
       register: stack_deploy
       ignore_errors: yes
+
