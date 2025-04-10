@@ -1,34 +1,32 @@
+---
 # Primero, ejecuta las tareas comunes de configuración (instalar Docker)
 - name: Importar playbook común
   ansible.builtin.import_playbook: playbook_common.yml
 
-# Luego, ejecuta las tareas específicas del worker
-- name: Configuración Específica del Nodo Worker
+# Luego, ejecuta las tareas específicas del manager
+- name: Configuración Específica del Nodo Manager
   hosts: all
   become: yes
   vars:
-    swarm_join_file: /vagrant/unir_swarm.txt
+    swarm_init_file: /vagrant/swarm_init.txt
     repo_dest: /vagrant/bus-app
     app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
+    swarm_advertise_addr: "192.168.33.10"  # Dirección para el anuncio de Swarm
   tasks:
-    - name: Esperar a que el archivo del comando de unión esté creado por el manager
-      ansible.builtin.wait_for:
-        path: "{{ swarm_join_file }}"
+    - name: Inicializar el Docker Swarm
+      docker_swarm:
         state: present
-        timeout: 120  # Espera hasta 2 minutos
+        advertise_addr: "{{ swarm_advertise_addr }}"
+      register: swarm_init_result
+      changed_when: "'Swarm initialized' in swarm_init_result.stdout"
+      notify:
+        - Crear archivo de unión
 
-    - name: Leer el comando de unión desde el archivo
-      ansible.builtin.command:
-        cmd: "cat {{ swarm_join_file }}"
-      register: join_cmd_output
-      changed_when: false  # Leer un archivo no cambia el estado
-
-    - name: Unirse al Docker Swarm
-      ansible.builtin.command:
-        cmd: "{{ join_cmd_output.stdout | trim }}"
-      register: swarm_join_result
-      failed_when: "'Error response from daemon' in swarm_join_result.stderr and 'This node is already part of a swarm' not in swarm_join_result.stderr"
-      changed_when: "'This node joined a swarm as a worker' in swarm_join_result.stdout"
+    - name: Crear un archivo para la unión de los workers
+      ansible.builtin.copy:
+        content: "{{ swarm_init_result.stdout | regex_search('docker swarm join.*', '\\0') }}"
+        dest: "{{ swarm_init_file }}"
+      when: swarm_init_result.changed
 
     - name: Construir imágenes de la aplicación con Docker Compose
       ansible.builtin.command:
@@ -39,14 +37,20 @@
       register: compose_build_result
       changed_when: "'Successfully built' in compose_build_result.stdout"
 
-    - name: Crear un servicio en Docker Swarm
-      community.docker.docker_service:
-        name: busapp
-        image: "{{ repo_dest }}/bus-ticket-app:latest"  # Cambia esto por la ruta correcta de tu imagen Docker
-        args: "--replicas 3"  # Cambia el número de réplicas según tus necesidades
-        state: present
-      register: service_result
+    - name: Desplegar el servicio de Docker Swarm usando Docker Compose
+      ansible.builtin.command:
+        cmd: docker stack deploy -c {{ app_build_dir }}/docker-compose.yml busapp
+        chdir: "{{ app_build_dir }}"
+      register: deploy_result
+      changed_when: "'Creating service' in deploy_result.stdout"
 
     - name: Verificar la creación del servicio
       debug:
-        msg: "Servicio creado con éxito: {{ service_result }}"
+        msg: "El servicio ha sido desplegado correctamente"
+
+  handlers:
+    - name: Crear archivo de unión
+      ansible.builtin.copy:
+        content: "{{ swarm_init_result.stdout | regex_search('docker swarm join.*', '\\0') }}"
+        dest: "{{ swarm_init_file }}"
+
