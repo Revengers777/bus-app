@@ -1,25 +1,42 @@
+# Primero, ejecuta las tareas comunes de configuración (instalar docker)
+- name: Importar playbook común
+  ansible.builtin.import_playbook: playbook_common.yml
+
+# Luego, ejecuta las tareas específicas del worker
 - name: Configuración Específica del Nodo Worker
   hosts: all
   become: yes
   vars:
-    swarm_join_file: /vagrant/unir_swarm.txt
-    repo_dest: /vagrant/bus-app
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
+    swarm_join_file: /vagrant/unir_swarm.txt  # Ruta al archivo del comando de join
+    repo_dest: /vagrant/bus-app 
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build/deploy
   tasks:
+    # Espera a que el archivo de unión esté disponible
     - name: Esperar a que el archivo de unión esté disponible
       ansible.builtin.wait_for:
         path: "{{ swarm_join_file }}"
         state: present
         timeout: 120
-    
+
+    # Lee el comando de unión desde el archivo
     - name: Leer el comando de unión desde el archivo
       ansible.builtin.command: "cat {{ swarm_join_file }}"
       register: join_cmd_output
-      changed_when: false
-    
+      changed_when: false  # Leer el archivo no cambia el estado
+
+    # Unirse al Docker Swarm
     - name: Unirse al Docker Swarm
       ansible.builtin.command: "{{ join_cmd_output.stdout | trim }}"
       register: swarm_join_result
       failed_when: "'Error response from daemon' in swarm_join_result.stderr and 'This node is already part of a swarm' not in swarm_join_result.stderr"
       changed_when: "'This node joined a swarm as a worker' in swarm_join_result.stdout"
 
+    # Construir las imágenes de la aplicación con Docker Compose
+    - name: Construir imágenes de la aplicación con docker compose
+      ansible.builtin.command:
+        cmd: docker compose build
+        chdir: "{{ app_build_dir }}"  # Usa la variable para el directorio correcto
+      environment:  # Pasa variables de entorno si son necesarias para Docker Compose
+        COMPOSE_PROJECT_NAME: busapp  # Establece un nombre de proyecto para Docker Compose
+      register: compose_build_result
+      changed_when: "'Successfully built' in compose_build_result.stdout"
