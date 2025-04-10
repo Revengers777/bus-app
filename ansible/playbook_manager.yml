@@ -2,11 +2,10 @@
   hosts: all
   become: yes
   vars:
-    swarm_join_file: /vagrant/unir_swarm.txt  # Archivo que contiene el comando para unir al swarm
-    manager_ip: 192.168.33.10  # IP del manager
-    repo_url: https://github.com/Revengers777/bus-app.git  # Repositorio de la app
-    repo_dest: /vagrant/bus-app  # Directorio donde se clonará el repositorio
-    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"  # Directorio para build y despliegue de la app
+    manager_ip: 192.168.33.10
+    repo_url: https://github.com/Revengers777/bus-app.git
+    repo_dest: /vagrant/bus-app
+    app_build_dir: "{{ repo_dest }}/bus-ticket-app/"
   tasks:
     - name: Inicializar Docker Swarm
       ansible.builtin.command:
@@ -15,20 +14,18 @@
       failed_when: "'Error response from daemon' in swarm_init_result.stderr and 'This node is already part of a swarm' not in swarm_init_result.stderr"
       changed_when: "'Swarm initialized' in swarm_init_result.stdout"
 
-    - name: Obtener token de worker para unir nodos
+    - name: Obtener token de worker
       ansible.builtin.shell:
         cmd: "docker swarm join-token -q worker"
       register: worker_token
       changed_when: false
 
-    - name: Guardar el comando de unión en el archivo
-      ansible.builtin.copy:
-        content: "docker swarm join --token {{ worker_token.stdout }} {{ manager_ip }}:2377"
-        dest: "{{ swarm_join_file }}"
-    
-    # Desplegar la aplicación
+    - name: Establecer token de swarm como variable
+      ansible.builtin.set_fact:
+        swarm_worker_token: "{{ worker_token.stdout }}"
+
     - name: Desplegar la aplicación con Docker Compose
       ansible.builtin.command:
-        cmd: docker-compose -f /vagrant/bus-app/bus-ticket-app/docker-compose.yml up -d
+        cmd: docker-compose -f docker-compose.yml up -d
         chdir: "{{ app_build_dir }}"
 
