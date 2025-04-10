@@ -15,11 +15,6 @@
     swarm_advertise_addr: "192.168.33.10"
 
   tasks:
-    - name: Instalar la colección community.docker
-      ansible.builtin.command:
-        cmd: ansible-galaxy collection install community.docker
-      become: yes
-
     - name: Actualizar caché de apt
       ansible.builtin.apt:
         update_cache: yes
@@ -71,4 +66,5 @@
         name: docker
         state: restarted
         enabled: yes
+
 
