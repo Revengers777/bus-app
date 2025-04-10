@@ -1,4 +1,3 @@
-# playbook_common.yml
 - name: Configuración Común para Nodos Docker
   hosts: all
   become: yes
@@ -13,16 +12,13 @@
       - revengers0/payment-gateway:latest
       - revengers0/route-scheduler:latest
     swarm_advertise_addr: "192.168.33.10"
-    manager_ip: "192.168.33.10"  # IP del nodo principal (maestro)
-    swarm_join_file: /vagrant/unir_swarm.txt  # Ubicación del archivo de unión
-
   tasks:
     - name: Actualizar caché de apt
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Instalar paquetes prerrequisito (incluyendo git)
+    - name: Instalar paquetes prerequisito (incluyendo git)
       ansible.builtin.apt:
         name: ['curl', 'ca-certificates', 'gnupg', 'lsb-release', 'git']
         state: present
@@ -48,67 +44,8 @@
       become: yes
       become_user: root
 
-    - name: Verificar instalación de Docker Compose
-      command: docker-compose --version
-      register: docker_compose_version
-      ignore_errors: yes
-
-    - name: Mostrar versión de Docker Compose
-      debug:
-        msg: "Docker Compose está instalado: {{ docker_compose_version.stdout }}"
-
-    - name: Inicializar Docker Swarm en el nodo principal
-      shell: |
-        docker swarm init --advertise-addr {{ swarm_advertise_addr }}
-      when: inventory_hostname == 'principal'
-      register: swarm_init
-      ignore_errors: yes
-
-    - name: Crear la red overlay para Docker Swarm
-      shell: |
-        docker network create --driver=overlay app-network
-      when: inventory_hostname == 'principal'
-      register: network_create
-      ignore_errors: yes
-
-    - name: Obtener token de worker para unir nodos
-      shell: |
-        docker swarm join-token -q worker
-      when: inventory_hostname == 'principal'
-      register: worker_token
-      changed_when: false
-
-    - name: Crear archivo de unión para trabajadores
-      ansible.builtin.shell: "echo '{{ worker_token.stdout }}' > {{ swarm_join_file }}"
-      when: inventory_hostname == 'principal'
-      register: create_join_file
-      changed_when: create_join_file.rc == 0
-
-    - name: Copiar el archivo de unión al nodo trabajador
-      ansible.builtin.copy:
-        src: "{{ swarm_join_file }}"
-        dest: "{{ swarm_join_file }}"
-      when: inventory_hostname != 'principal'
-
-    - name: Unir el nodo trabajador al clúster de Docker Swarm
-      shell: |
-        docker swarm join --token {{ worker_token.stdout }} {{ manager_ip }}:2377
-      when: inventory_hostname != 'principal'
-      register: join_result
-      failed_when: join_result.rc != 0
-      changed_when: join_result.rc == 0
-
     - name: Descargar imágenes de Docker desde Docker Hub
       docker_image:
         name: "{{ item }}"
         source: pull
       with_items: "{{ docker_images }}"
-      when: inventory_hostname == 'principal'
-
-    - name: Desplegar la aplicación usando Docker Stack
-      shell: |
-        docker stack deploy -c {{ repo_dest }}/bus-ticket-app/docker-compose.yml bus_stack
-      when: inventory_hostname == 'principal'
-      register: stack_deploy
-      ignore_errors: yes
-
